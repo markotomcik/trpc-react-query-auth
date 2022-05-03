@@ -1,19 +1,19 @@
 import React from 'react';
 import {
-  useQuery,
-  useMutation,
   useQueryClient,
   UseMutateAsyncFunction,
   QueryObserverResult,
   RefetchOptions,
 } from 'react-query';
+import { createReactQueryHooks } from '@trpc/react';
 
-export interface AuthProviderConfig<User = unknown, Error = unknown> {
+export interface AuthProviderConfig<Error = unknown> {
   key?: string;
-  loadUser: (data: any) => Promise<User>;
-  loginFn: (data: any) => Promise<User>;
-  registerFn: (data: any) => Promise<User>;
-  logoutFn: () => Promise<any>;
+  trpc: ReturnType<typeof createReactQueryHooks>;
+  loadPath?: string;
+  loginPath?: string;
+  registerPath?: string;
+  logoutPath?: string;
   waitInitial?: boolean;
   LoaderComponent?: () => JSX.Element;
   ErrorComponent?: ({ error }: { error: Error | null }) => JSX.Element;
@@ -47,7 +47,7 @@ export function initReactQueryAuth<
   Error = unknown,
   LoginCredentials = unknown,
   RegisterCredentials = unknown
->(config: AuthProviderConfig<User, Error>) {
+>(config: AuthProviderConfig<Error>) {
   const AuthContext = React.createContext<AuthContextValue<
     User,
     Error,
@@ -57,11 +57,12 @@ export function initReactQueryAuth<
   AuthContext.displayName = 'AuthContext';
 
   const {
-    loadUser,
-    loginFn,
-    registerFn,
-    logoutFn,
+    trpc,
     key = 'auth-user',
+    loadPath = 'load',
+    loginPath = 'login',
+    registerPath = 'register',
+    logoutPath = 'logout',
     waitInitial = true,
     LoaderComponent = () => <div>Loading...</div>,
     ErrorComponent = (error: any) => (
@@ -80,32 +81,26 @@ export function initReactQueryAuth<
       isIdle,
       isSuccess,
       refetch,
-    } = useQuery<User, Error>({
-      queryKey: key,
-      queryFn: loadUser,
-    });
+    } = trpc.useQuery([`${key}.${loadPath}`]);
 
     const setUser = React.useCallback(
-      (data: User) => queryClient.setQueryData(key, data),
+      (data) => queryClient.setQueryData(key, data),
       [queryClient]
     );
 
-    const loginMutation = useMutation({
-      mutationFn: loginFn,
+    const loginMutation = trpc.useMutation([`${key}.${loginPath}`], {
+      onSuccess: user => {
+        setUser(user);
+      },
+    })
+
+    const registerMutation = trpc.useMutation([`${key}.${registerPath}`], {
       onSuccess: user => {
         setUser(user);
       },
     });
 
-    const registerMutation = useMutation({
-      mutationFn: registerFn,
-      onSuccess: user => {
-        setUser(user);
-      },
-    });
-
-    const logoutMutation = useMutation({
-      mutationFn: logoutFn,
+    const logoutMutation = trpc.useMutation([`${key}.${logoutPath}`], {
       onSuccess: () => {
         queryClient.clear();
       },
